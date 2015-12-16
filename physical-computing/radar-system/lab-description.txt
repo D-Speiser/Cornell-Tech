@@ -1,0 +1,18 @@
+In this lab, you will make a tiny radar system using a servo motor and an ultra-sonic range finder.  Your system will:
+	1) Take as input the left and right limits for the rotation in degrees, and the resolution in degrees via the serial terminal.  For example, entering "10,170,5" would mean rotate from 10 degrees to 170 degrees and take readings in 5 degree increments.
+	2) Rotate the range finder as specified by the input.  Keep rotating left and right by the specified number of degrees until new inputs are entered.
+	3) Take distance measurements (in millimeters) to the nearest solid object and the angle at which the measurements were taken and send them to the serial port.  Use the right most position to be 0 degrees, and the left most position to be 180 degrees.
+	4) A reading of "0,20" should mean that there is something 2 centimeters away directly to the right.  "90,35" would mean something directly in front of us at 3.5 centimeters.  "180,40" means something to the left at 4 centimeters.
+
+For this project, you will receive the following materials:
+
+1x HRLV-MaxSonar-EZ1 Ultrasonic Range Finder
+1x 10uf Capacitor
+1x 1uf Capacitor
+1x 7805C 5V voltage regulator
+1x Isolator
+1x 9V power adapter
+2x small breadboards
+4x wires with female pin connectors
+1x FS5106B High Torque Servo
+1x 3D printed range finder mount

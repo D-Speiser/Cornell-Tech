@@ -16,25 +16,27 @@ def xor(a,b):
 """
 Part 2: Why Feistel encryption needs a minimum of four rounds
 
-Solution: 
+Solution:
 For 1 round of Feistel, after encryption the new left portion of the output ciphertext is the same as the right portion of the original text. This - in plain text - reveals the input.
 
-For 2 rounds of Feistel, let’s look at the process of each round: 
-L’  <- R
-R’  <- L ⊕ f(R)
-L’’ <- R’
-R’’ <- L’ ⊕ f(R’)
+For 2 rounds of Feistel, let's look at the process of each round:
+L'  <- R
+R'  <- L + f(R)
+L'' <- R'
+R'' <- L' + f(R')
 
-where f() is a round function. We can see that two messages with the same right half such that m1 = L1 + R, m2 = L2 + R. We also notice that for 2nd round Feistel, L1’’ = L1 ⊕ f(R), and L2’’ = L2⊕f(R). Therefore, we have L1’’ ⊕ L2’’ = L1 ⊕ L2 which is equivalent to saying use a one time pad on the left side.
+where f() is a round function. We can see that two messages with the same right half such that m1 = L1 * R, m2 = L2 * R. We also notice that for 2nd round Feistel, L1'' = L1 + f(R), and L2'' = L2 + f(R). Therefore, we have L1'' + L2'' = L1 + L2 which is equivalent to saying use a one time pad on the left side.
 
 For 3 rounds of Feistel, let function F be the following algorithm:
 (1). F get input L1 and R1 from input data, and put them into the encrypt function encrypt(L1, R1) to get encrypted ciphertext, S1, and T1 respectively. 
 (2). F then chooses an element L2 != L1 and get encrypted text such that encrypt(L2, R1) to get corresponding encrypted cipher text S2 and T2. 
-(3). Finally, we perform a decrypt where decrypt(S2, T2 ⊕ L1 ⊕ L2)  to S3 and T3. If we test if R3 = S2 ⊕S1⊕R1 and this is always true if only 3 round.
+(3). Finally, we perform a decrypt where decrypt(S2, T2 + L1 + L2)  to S3 and T3. If we test if R3 = S2 + S1 + R1 and this is always true if only 3 round.
 
 References:
 1) https://courses.cs.washington.edu/courses/cse599b/06wi/lecture4.pdf
 2) https://eprint.iacr.org/2008/036.pdf
+
+Note: + is a bitwise xor, and * is string concatenation
 """
 class MyFeistel:
     def __init__(self, key, num_rounds, backend=None):
@@ -173,15 +175,12 @@ class LengthPreservingCipher(object):
         self._length = length
         self._num_rounds = 10 # Hard code this. Don't leave this kind
                               # of parameter upto the developers.
-
-        # TODO
+        self._feistel = MyFeistel(key, self._num_rounds)
 
     def encrypt(self, data):
-        # TODO
-        return data
+        assert len(data) == self._length, "Data size must equal the length defined in the instantiation of LengthPreservingCipher."
+        return self._feistel.encrypt(data)
 
     def decrypt(self, data):
-        # TODO
-        return data
-
-    # TODO - add other functions if required
+        assert len(data) == self._length, "Data size must equal the length defined in the instantiation of LengthPreservingCipher."
+        return self._feistel.decrypt(data)

@@ -36,7 +36,10 @@ References:
 1) https://courses.cs.washington.edu/courses/cse599b/06wi/lecture4.pdf
 2) https://eprint.iacr.org/2008/036.pdf
 
-Note: + is a bitwise xor, and * is string concatenation
+-------- Note: + is a bitwise xor, and * is string concatenation --------
+Attacks for 4, 5, and 6 rounds of feistel (6th round in O(2^(2n))) exist, but we could not 'decipher' how to apply them.
+Link to description of these attacks can be found here:
+https://www.iacr.org/archive/asiacrypt2001/22480224.pdf
 """
 class MyFeistel:
     def __init__(self, key, num_rounds, backend=None):
@@ -44,10 +47,7 @@ class MyFeistel:
             backend = default_backend()
 
         key = base64.urlsafe_b64decode(key)
-        if len(key) != 16:
-            raise ValueError(
-                "Key must be 16 url-safe base64-encoded bytes. Got: {} ({})".format(key, len(key))
-            )
+        assert len(key) == 16, "Key must be 16 url-safe base64-encoded bytes. Got: {} ({})".format(key, len(key))
         self._num_rounds = num_rounds
         self._encryption_key = key
         self._backend = backend
@@ -63,22 +63,18 @@ class MyFeistel:
         h.update(data)
         return h.finalize()
 
-    ################################################################################
-    ## Below are some free utitlity functions. How/where to use them is up to you. ###
-
     def _pad_string(self, data):
         """Pad @data if required, returns a tuple containing a boolean
         (whether it is padded), and the padded string.
-
         """
         h_data = data.encode('hex')
         n = len(data)
         if n%2 == 0:
             return False, data
         l,r = h_data[:n], h_data[n:]
-        l = '0' + l # I am padding at the beginning, you can do it in
-                    # the end as well. Remember to update the unpad
-                    # function accordingly.
+        # pad at the beginning
+        # can be done at the end as well
+        l = '0' + l
         r = '0' + r
         return True, (l+r).decode('hex')
 
@@ -86,34 +82,27 @@ class MyFeistel:
         if not is_padded:
             return padded_str
         n = len(padded_str)
-        assert n%2 == 0, "Padded string must of even length. You are "\
-            "probably sending something wrong. Note it contains both "\
-            "left and right part. Otherwise, just do this unpadding in "\
-            "your function"
+        assert n % 2 == 0, "Padded string must of even length. You are probably passing faulty data."
         l, r = padded_str[:n/2], padded_str[n/2:]
         return (l.encode('hex')[1:] + r.encode('hex')[1:]).decode('hex')
-
+    """
+        The Function instantiates AES in CBC mode with a static IV 
+        to act as a round function, a.k.a. pseudorandom function generator.
+    """
     def _prf(self, key, data):
-        """If you haven't figured this out already, this function instanctiate
-        AES in CBC mode with static IV, to act as a round function,
-        a.k.a. pseudorandom function generator.
-        
-        WARNING: I am leaving an intentional bug in the
-        function. Figure that out, if you want to use this function.
-
-        """
         padder = padding.PKCS7(ciphers.algorithms.AES.block_size).padder()
         padded_data = padder.update(data) + padder.finalize()
         encryptor = ciphers.Cipher(ciphers.algorithms.AES(key),
                                    ciphers.modes.CBC(self._iv),
                                    self._backend).encryptor()
         return  (encryptor.update(padded_data) + encryptor.finalize())[:len(data)]
-    
+
+    # Can also instantiate the round function using a SHA256 hash function.
     def _prf_hash(self, key, data):
         """Just FYI, you can also instantiate round function ushig SHA256 hash
         function. You don't have to use this function.
         """
-        out = self.SHA256hash(data+key) # TODO: SecCheck
+        out = self.SHA256hash(data+key)
         while len(out)<len(data):
             out += self.SHA256hash(out+key)
         return out[:len(data)]
@@ -123,13 +112,15 @@ class MyFeistel:
         Clear the first four bits of s and set it to 0.
         e.g, 0xa1 --> 0x01, etc.
         """
-        assert len(s) == 1, "You called _clear_most_significant_four_bits function, "\
-            "and I only work with 1 byte"
+        assert len(s) == 1, "You called _clear_most_significant_four_bits function, but I only work with 1 byte."
         return ('0' + s.encode('hex')[1]).decode('hex')
-
-    ## END-OF-FREE-LUNCH
-    ################################################################################
-    
+    """
+        For each round of encryption we check whether the given data needs to get padded.
+        The function self._pad_string handles both cases (even length not needing padding,
+        and odd length cases which need padding). We call self._feistel_round_enc for self._num_rounds
+        times, which encrypts and unpads the message each time before beginning next round of encryption. 
+        We iterate until we the number of rounds required defined by self._num_rounds.
+    """
     def encrypt(self, data):
         ctx = data
         for i in range(self._num_rounds):
@@ -137,7 +128,13 @@ class MyFeistel:
             ctx = self._feistel_round_enc(padded_data, i)
             ctx = self._unpad_string(is_padded, ctx)
         return ctx
-
+    """
+        The decrypt function has a similar algorithm to that of the encrypt function.
+        The only difference is that the iteration is done in the reverse order as that
+        of encrypt, since we need to use the opposide order that the encryption keys were 
+        given in, in order to use the correct one for the corresponding round. The logic
+        otherwise is the same.
+    """
     def decrypt(self, ctx):
         data = ctx
         for i in range(self._num_rounds - 1, -1, -1):
@@ -145,7 +142,14 @@ class MyFeistel:
             data = self._feistel_round_dec(padded_ctx, i)
             data = self._unpad_string(is_padded, data)
         return data
-
+    """
+        According to the definition of a Feistel cipher, we first divide the input data 
+        into left and right portions of equal length. Next, we xor the left hand side of the
+        data with the right hand side of the data combined with the _prf (round function). Finally
+        the new left hand portion of the data is the xor data calculated (as stated above) and the 
+        right hand portion is the original left hand of the data. We return their concatenation as
+        the encrypted data from this round.
+    """
     def _feistel_round_enc(self, data, round_num):
         """This function implements one round of Fiestel encryption block.
         """
@@ -157,7 +161,9 @@ class MyFeistel:
         print "ENC Round {0} ctx: {1}".format(round_num, binascii.b2a_hex(Ri + R))
         
         return Ri + R
-    
+    """
+        Decrypt is similar to encrypt, without loss of generality.
+    """
     def _feistel_round_dec(self, data, round_num):
         """This function implements one round of Fiestel decryption block.
         """
@@ -169,18 +175,22 @@ class MyFeistel:
         print "DEC Round {0} ctx: {1}".format(round_num, binascii.b2a_hex(Li + Ri))
 
         return Li + Ri
-
+"""
+    This class is a simplified wrapper class of what we've implemented above. We do 
+    not allow a user to change the number of rounds, or the length of the data in order
+    to prevent them from instantiating a cryptographic primitive in an insecure way.
+"""
 class LengthPreservingCipher(object):
     def __init__(self, key, length=5):
         self._length = length
         self._num_rounds = 10 # Hard code this. Don't leave this kind
                               # of parameter upto the developers.
         self._feistel = MyFeistel(key, self._num_rounds)
-
+    # Calls MyFeistel's encrypt method.
     def encrypt(self, data):
         assert len(data) == self._length, "Data size must equal the length defined in the instantiation of LengthPreservingCipher."
         return self._feistel.encrypt(data)
-
+    # Calls MyFeistel's decrypt method.
     def decrypt(self, data):
         assert len(data) == self._length, "Data size must equal the length defined in the instantiation of LengthPreservingCipher."
         return self._feistel.decrypt(data)
